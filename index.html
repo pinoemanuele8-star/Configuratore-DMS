@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DMS Configurator - Smart Working Edition</title>
+    <!-- Tailwind CSS per uno stile moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <!-- Font Awesome per le icone -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        .card-animate {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-animate:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
+        /* Checkbox personalizzata */
+        .custom-checkbox {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            accent-color: #ef4444;
+        }
+
+        /* Nascondi controlli input numero */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-12">
+
+    <div id="app-container">
+        <!-- Il contenuto viene generato da JavaScript -->
+    </div>
+
+    <script>
+        // --- CHIAVE STORAGE ---
+        const STORAGE_KEY = 'dms_configurator_data_v2';
+
+        // --- STATO DELL'APPLICAZIONE ---
+        let state = {
+            view: 'home', // 'home' | 'edit' | 'report'
+            editingId: null,
+            searchQuery: '',
+            modules: []
+        };
+
+        // --- INIZIALIZZAZIONE DATI ---
+        function initData() {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                state.modules = JSON.parse(savedData);
+            } else {
+                state.modules = Array.from({ length: 20 }, (_, i) => ({
+                    id: i + 1,
+                    name: `Modulo ${String(i + 1).padStart(2, '0')}`,
+                    description: '',
+                    hours: 0,
+                    isConfigured: false,
+                    isDone: false // Nuova proprietà per la spunta di completamento
+                }));
+                saveToLocalStorage();
+            }
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.modules));
+        }
+
+        // --- FUNZIONI DI LOGICA ---
+        
+        function navigate(view, id = null) {
+            state.view = view;
+            state.editingId = id;
+            render();
+            window.scrollTo(0, 0);
+        }
+
+        function saveModule(id) {
+            const desc = document.getElementById('field-desc').value;
+            const hrs = parseInt(document.getElementById('field-hours').value) || 0;
+            const done = document.getElementById('field-done').checked;
+            
+            const index = state.modules.findIndex(m => m.id === id);
+            state.modules[index] = {
+                ...state.modules[index],
+                description: desc,
+                hours: hrs,
+                isConfigured: true,
+                isDone: done
+            };
+            
+            saveToLocalStorage();
+            navigate('home');
+        }
+
+        function resetModule(id) {
+            const index = state.modules.findIndex(m => m.id === id);
+            state.modules[index] = {
+                ...state.modules[index],
+                description: '',
+                hours: 0,
+                isConfigured: false,
+                isDone: false
+            };
+            
+            saveToLocalStorage();
+            navigate('home');
+        }
+
+        function updateSearch(val) {
+            state.searchQuery = val.toLowerCase();
+            render();
+        }
+
+        // --- TEMPLATE COMPONENTS ---
+
+        function getHeader(title, showBack = false) {
+            return `
+                <nav class="sticky top-0 z-50 glass-effect no-print">
+                    <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            ${showBack ? `
+                                <button onclick="navigate('home')" class="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-600">
+                                    <i class="fas fa-chevron-left text-xl"></i>
+                                </button>
+                            ` : ''}
+                            <div>
+                                <h1 class="text-xl font-black text-slate-900 leading-tight">${title}</h1>
+                                <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Smart Work Dashboard</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button onclick="navigate('report')" class="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all shadow-lg active:scale-95 flex items-center gap-2">
+                                <i class="fas fa-file-invoice"></i> Riepilogo
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+            `;
+        }
+
+        function renderHome() {
+            const configured = state.modules.filter(m => m.isConfigured);
+            const completed = state.modules.filter(m => m.isDone);
+            const totalHours = configured.reduce((sum, m) => sum + m.hours, 0);
+            const progress = Math.round((completed.length / state.modules.length) * 100);
+            const filtered = state.modules.filter(m => m.name.toLowerCase().includes(state.searchQuery));
+
+            return `
+                ${getHeader("Configuratore DMS")}
+                <main class="max-w-7xl mx-auto p-6 space-y-8">
+                    <!-- Statistiche Veloci -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center text-xl">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase">Progresso</p>
+                                <p class="text-2xl font-black text-slate-900">${progress}%</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-xl">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase">Totale Ore</p>
+                                <p class="text-2xl font-black text-slate-900">${totalHours}h</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center text-xl">
+                                <i class="fas fa-layer-group"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase">Configurati</p>
+                                <p class="text-2xl font-black text-slate-900">${configured.length} / 20</p>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-xl">
+                                <i class="fas fa-check-double"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase">Completati</p>
+                                <p class="text-2xl font-black text-slate-900">${completed.length} / 20</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ricerca -->
+                    <div class="relative max-w-md">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" placeholder="Cerca modulo..." 
+                               oninput="updateSearch(this.value)" value="${state.searchQuery}"
+                               class="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all font-medium">
+                    </div>
+
+                    <!-- Grid Moduli -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        ${filtered.map(m => `
+                            <div onclick="navigate('edit', ${m.id})" class="card-animate bg-white p-6 rounded-[2rem] border-2 cursor-pointer shadow-sm ${m.isDone ? 'border-emerald-500/30' : (m.isConfigured ? 'border-red-500/30' : 'border-transparent')}">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center ${m.isDone ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100' : (m.isConfigured ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-400')}">
+                                        <i class="fas ${m.isDone ? 'fa-check-double' : (m.isConfigured ? 'fa-check' : 'fa-gear')}"></i>
+                                    </div>
+                                    ${m.isDone ? '<span class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md uppercase tracking-tighter">Finito</span>' : ''}
+                                </div>
+                                <h3 class="font-bold text-slate-900">${m.name}</h3>
+                                <p class="text-xs text-slate-400 mt-1">${m.isDone ? 'Completato' : (m.isConfigured ? 'Bozza salvata' : 'In attesa...')}</p>
+                                <div class="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between">
+                                    <span class="text-sm font-black text-slate-800">${m.hours}h</span>
+                                    <i class="fas fa-arrow-right text-xs text-slate-300"></i>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </main>
+            `;
+        }
+
+        function renderEdit() {
+            const mod = state.modules.find(m => m.id === state.editingId);
+            return `
+                ${getHeader(`Configura ${mod.name}`, true)}
+                <main class="max-w-4xl mx-auto p-6 animate-in">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="md:col-span-2 space-y-6">
+                            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+                                <label class="block text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Note e Specifiche</label>
+                                <textarea id="field-desc" placeholder="Descrivi le attività del modulo..."
+                                    class="w-full h-64 p-6 bg-slate-50 rounded-2xl border-none focus:ring-4 focus:ring-red-500/10 outline-none transition-all text-slate-700 font-medium leading-relaxed resize-none">${mod.description}</textarea>
+                            </div>
+                            
+                            <div class="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                                        <i class="fas fa-check-circle"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-slate-900 text-sm">Segna come completato</p>
+                                        <p class="text-xs text-slate-400">Questo modulo non apparirà più come bozza</p>
+                                    </div>
+                                </div>
+                                <input type="checkbox" id="field-done" ${mod.isDone ? 'checked' : ''} class="custom-checkbox">
+                            </div>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div class="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm text-center">
+                                <label class="block text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Ore Stimate</label>
+                                <div class="relative">
+                                    <input type="number" id="field-hours" value="${mod.hours}" min="0"
+                                        class="w-full text-5xl font-black text-slate-900 bg-transparent text-center focus:outline-none">
+                                    <p class="text-slate-300 font-bold">ORE</p>
+                                </div>
+                            </div>
+                            <button onclick="saveModule(${mod.id})" class="w-full bg-red-600 hover:bg-red-700 text-white font-black py-6 rounded-3xl shadow-xl shadow-red-200 transition-all active:scale-95">
+                                <i class="fas fa-save mr-2"></i> Salva Modulo
+                            </button>
+                            <button onclick="resetModule(${mod.id})" class="w-full text-slate-400 hover:text-red-600 font-bold py-2 transition-colors">
+                                <i class="fas fa-trash-alt mr-2"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </main>
+            `;
+        }
+
+        function renderReport() {
+            const active = state.modules.filter(m => m.isConfigured);
+            const total = active.reduce((sum, m) => sum + m.hours, 0);
+
+            return `
+                ${getHeader("Riepilogo Risorse", true)}
+                <main class="max-w-5xl mx-auto p-6 space-y-8 animate-in">
+                    <div class="bg-white rounded-[3rem] shadow-xl overflow-hidden border border-slate-100">
+                        <div class="bg-slate-900 p-10 text-white">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h2 class="text-red-500 font-black uppercase tracking-[0.3em] text-xs">Documento Ufficiale</h2>
+                                    <p class="text-4xl font-black mt-2">DMS Report</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-slate-400 text-xs font-bold uppercase">Totale Progetto</p>
+                                    <p class="text-6xl font-black">${total}<span class="text-xl text-red-500 ml-1">h</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="p-10">
+                            <h3 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
+                                <i class="fas fa-list text-red-600"></i> Dettaglio Moduli
+                            </h3>
+                            <div class="space-y-4">
+                                ${active.length === 0 ? `
+                                    <div class="py-12 text-center text-slate-400 border-2 border-dashed border-slate-100 rounded-3xl">
+                                        Nessun modulo configurato.
+                                    </div>
+                                ` : active.map(m => `
+                                    <div class="flex items-center justify-between p-6 rounded-2xl border transition-all ${m.isDone ? 'bg-emerald-50/30 border-emerald-100' : 'bg-slate-50 border-transparent'}">
+                                        <div class="flex items-center gap-4">
+                                            <div class="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-black ${m.isDone ? 'text-emerald-600' : 'text-red-600'} shadow-sm">
+                                                ${m.id}
+                                            </div>
+                                            <div>
+                                                <div class="flex items-center gap-2">
+                                                    <p class="font-bold text-slate-900">${m.name}</p>
+                                                    ${m.isDone ? '<i class="fas fa-check-circle text-emerald-500 text-[10px]"></i>' : ''}
+                                                </div>
+                                                <p class="text-xs text-slate-400 line-clamp-1">${m.description || 'Nessuna descrizione.'}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center gap-6">
+                                            <span class="text-xl font-black text-slate-900">${m.hours}h</span>
+                                            <button onclick="navigate('edit', ${m.id})" class="no-print p-2 bg-white text-slate-400 hover:text-red-600 rounded-lg shadow-sm">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+
+                            <div class="mt-12 no-print">
+                                <button onclick="window.print()" class="w-full bg-slate-900 hover:bg-black text-white font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3">
+                                    <i class="fas fa-print"></i> Stampa Report o Salva PDF
+                                </button>
+                                <button onclick="if(confirm('Vuoi davvero cancellare tutto?')) { localStorage.removeItem(STORAGE_KEY); location.reload(); }" 
+                                        class="w-full mt-4 text-slate-400 hover:text-red-600 font-bold py-2 transition-colors">
+                                    <i class="fas fa-eraser mr-2"></i> Reset totale database
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            `;
+        }
+
+        // --- CORE RENDERER ---
+        function render() {
+            const container = document.getElementById('app-container');
+            if (state.view === 'home') container.innerHTML = renderHome();
+            else if (state.view === 'edit') container.innerHTML = renderEdit();
+            else if (state.view === 'report') container.innerHTML = renderReport();
+        }
+
+        // Avvio
+        window.onload = function() {
+            initData();
+            render();
+        };
+    </script>
+</body>
+</html>
